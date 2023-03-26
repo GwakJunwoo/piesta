@@ -7,9 +7,15 @@ from typing import List, Optional, Dict, DefaultDict
 
 class Universe:
     def __init__(self, universe : Optional[Dict] = None):
+        """
+        Initializes a new instance of the Universe class with the given universe dict.
+        """
         self._update(universe)
 
     def _update(self, universe : Optional[Dict] = None):
+        """
+        Updates the internal state of the Universe object with the given universe dict.
+        """
         self._universe = universe or self.sample_universe()
         self._depth = self.dict_depth(self._universe)
         self._hierarchy_list = self.dict_keys_by_layer(self._universe)
@@ -23,6 +29,9 @@ class Universe:
         self._hierarchy[f'L{cnt+1}'] = self._last_assets
 
     def delete_assets_step(self, name, d):
+        """
+        Recursively deletes all assets with the given name in the given dictionary.
+        """
         if isinstance(d, dict):
             for key, value in list(d.items()):
                 if key == name:
@@ -37,15 +46,24 @@ class Universe:
             del d
 
     def delete_assets(self, name, d):
+        """
+        Deletes all assets with the given name in the universe dict and updates the internal state of the Universe object.
+        """
         self.delete_assets_step(name, d)
         self._update(self._universe)
 
     def dict_depth(self, d : Dict) -> int:
+        """
+        Returns the depth of the given dictionary.
+        """
         if isinstance(d, dict):
             return 1 + (max(map(self.dict_depth, d.values())) if d else 0)
         return 1
     
     def dict_keys_by_layer(self, d):
+        """
+        Returns a list of keys at each layer of the given dictionary hierarchy.
+        """
         result = [[]]
         for key, value in d.items():
             if isinstance(value, dict):
@@ -58,12 +76,18 @@ class Universe:
         return result
 
     def lowest_values(self, d):
+        """
+        Returns the lowest values of the given dictionary hierarchy.
+        """
         if isinstance(d, dict):
             return [value for val in d.values() for value in self.lowest_values(val)]
         else:
             return [d]
 
     def lowest_values_hierarchy(self, d):
+        """
+        Returns a flattened list of the lowest values in the given dictionary hierarchy.
+        """
         return list(reduce(operator.add, self.lowest_values(d) if d else []))
 
     # Generate sample universe dict -> Dict[Dict[List]]
