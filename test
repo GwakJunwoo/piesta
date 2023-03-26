@@ -1,0 +1,73 @@
+digraph G {
+	subgraph cluster_Stock {
+		label=Stock
+		Ticker_2 [label="Ticker_2
+(US)"]
+		Ticker_3 [label="Ticker_3
+(US)"]
+		Ticker_4 [label="Ticker_4
+(Europe)"]
+		Ticker_5 [label="Ticker_5
+(Europe)"]
+		Ticker_6 [label="Ticker_6
+(Japan)"]
+		Ticker_7 [label="Ticker_7
+(Japan)"]
+		Ticker_8 [label="Ticker_8
+(China)"]
+		Ticker_9 [label="Ticker_9
+(China)"]
+	}
+	subgraph cluster_Bond {
+		label=Bond
+		Ticker_10 [label="Ticker_10
+(Developed)"]
+		Ticker_11 [label="Ticker_11
+(Developed)"]
+		Ticker_12 [label="Ticker_12
+(Emerging)"]
+		Ticker_13 [label="Ticker_13
+(Emerging)"]
+	}
+	subgraph cluster_Alternative {
+		label=Alternative
+		Ticker_14 [label="Ticker_14
+(Real estate)"]
+		Ticker_15 [label="Ticker_15
+(Real estate)"]
+		Ticker_16 [label="Ticker_16
+(Hedge fund)"]
+		Ticker_17 [label="Ticker_17
+(Hedge fund)"]
+	}
+	subgraph cluster_Commodity {
+		label=Commodity
+		Ticker_18 [label="Ticker_18
+(Metal)"]
+		Ticker_19 [label="Ticker_19
+(Metal)"]
+		Ticker_20 [label="Ticker_20
+(Grains)"]
+		Ticker_21 [label="Ticker_21
+(Grains)"]
+		Ticker_22 [label="Ticker_22
+(Energy)"]
+		Ticker_23 [label="Ticker_23
+(Energy)"]
+	}
+	subgraph cluster_Currency {
+		label=Currency
+		Ticker_24 [label="Ticker_24
+(USDKRW)"]
+		Ticker_25 [label="Ticker_25
+(USDKRW)"]
+		Ticker_26 [label="Ticker_26
+(USDJPY)"]
+		Ticker_27 [label="Ticker_27
+(USDJPY)"]
+		Ticker_28 [label="Ticker_28
+(USDEUR)"]
+		Ticker_29 [label="Ticker_29
+(USDEUR)"]
+	}
+}
