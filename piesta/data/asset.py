@@ -28,6 +28,18 @@ class Universe:
     def remove(self, name):
         self._remove(name, self._universe)
 
+    def get_universe(self) -> Dict:
+        return self._universe
+    
+    def get_universe_by_layer(self) -> Dict:
+        return dict(self._hierarchy)
+    
+    def get_keys_layer(self) -> List:
+        return self._hierarchy_list
+    
+    def get_last_layer(self) -> List:
+        return self._last_assets
+
     def diagram(self, filename = None, save_png = False):
         g = Digraph('G', filename= filename or'universe_diagram', format='png')
         for asset_type in self._universe:
@@ -137,11 +149,13 @@ class Universe:
 
 
 
-"""test = Universe()
-print(test._hierarchy)
-print(test._hierarchy_list)
-print(test._universe)
+test = Universe()
+print(test.get_keys_layer())
+print(test.get_last_layer())
+print(test.get_universe())
+print(test.get_universe_by_layer())
 
+"""
 print("=======================")
 test.remove('Korea')
 print(test._hierarchy)
