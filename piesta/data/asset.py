@@ -1,28 +1,12 @@
+from collections import defaultdict
 from functools import reduce
 import operator
+from typing import Dict, List, Optional
 from graphviz import Digraph
-from typing import List, Optional, Dict, DefaultDict
+from treelib import Tree, Node
 
 class Universe:
-    """
-    The Universe class represents a collection of assets grouped by type. It has the following methods: 
-
-    __init__(self, universe: Optional[Dict] = None): Initializes a new instance of the Universe class with the given universe dict. If no universe is provided, a sample universe is generated.
-    remove(self, name): Deletes all assets with the given name in the universe dict and updates the internal state of the Universe object.
-    diagram(self, filename=None, save_png=False): Creates a diagram of the Universe object using the Digraph class from the graphviz package. The diagram shows the hierarchy of the assets by type. 
-    The diagram can be saved to a file and/or displayed using the view() method.
-    
-    _update(self, universe: Optional[Dict] = None): Updates the internal state of the Universe object with the given universe dict.
-    _remove(self, name, d): Recursively deletes all assets with the given name in the given dictionary.
-    _recur_remove_func(self, name, d): Recursively deletes all assets with the given name in the given dictionary.
-    _get_depth(self, d: Dict) -> int: Returns the depth of the given dictionary.
-    _get_keys_by_layer(self, d): Returns a list of keys at each layer of the given dictionary hierarchy.
-    _get_bottom_values(self, d): Returns the lowest values of the given dictionary hierarchy.
-    _get_bottom_values_by_layer(self, d): Returns a flattened list of the lowest values in the given dictionary hierarchy.
-    _generate_sample(self) -> Dict: Generates a sample universe dictionary.
-    """
-
-    def __init__(self, universe : Optional[Dict] = None):
+    def __init__(self, universe: Optional[Dict] = None):
         self._update(universe)
 
     def remove(self, name):
@@ -30,18 +14,18 @@ class Universe:
 
     def get_universe(self) -> Dict:
         return self._universe
-    
+
     def get_universe_by_layer(self) -> Dict:
         return dict(self._hierarchy)
-    
+
     def get_keys_layer(self) -> List:
         return self._hierarchy_list
-    
+
     def get_last_layer(self) -> List:
         return self._last_assets
 
-    def diagram(self, filename = None, save_png = False):
-        g = Digraph('G', filename= filename or'universe_diagram', format='png')
+    def diagram(self, filename=None, save_png=False):
+        g = Digraph('G', filename=filename or 'universe_diagram', format='png')
         for asset_type in self._universe:
             with g.subgraph(name=f'cluster_{asset_type}') as cluster:
                 cluster.attr(label=asset_type)
@@ -49,7 +33,7 @@ class Universe:
                     for ticker in self._universe[asset_type][asset_region]:
                         cluster.node(ticker, label=f"{ticker}\n({asset_region})")
         if save_png:
-            g.render(filename= filename or 'universe_diagram', view=False)
+            g.render(filename=filename or 'universe_diagram', view=False)
         else:
             g.view()
 
@@ -58,20 +42,18 @@ class Universe:
             self._recur_remove_func(name, d)
             self._update(self._universe)
 
-    
-    def _update(self, universe : Optional[Dict] = None):
+    def _update(self, universe: Optional[Dict] = None):
         self._universe = universe or self._generate_sample()
         self._depth = self._get_depth(self._universe)
         self._hierarchy_list = self._get_keys_by_layer(self._universe)
         self._last_assets = self._get_bottom_values_by_layer(self._universe)
-        self._hierarchy = DefaultDict(Optional[Dict or List])
+        self._hierarchy = defaultdict(Optional[Dict or List])
 
         cnt = 0
-        for level in range(self._depth-1):
+        for level in range(self._depth - 1):
             self._hierarchy[f'L{cnt}'] = self._hierarchy_list[level]
             cnt += 1
-        self._hierarchy[f'L{cnt+1}'] = self._last_assets
-
+        self._hierarchy[f'L{cnt + 1}'] = self._last_assets
 
     def _recur_remove_func(self, name, d):
         if isinstance(d, dict):
@@ -83,16 +65,13 @@ class Universe:
         elif isinstance(d, list):
             for item in d:
                 self._remove(name, item)
-
         elif isinstance(d, str):
             del d
 
-
-    def _get_depth(self, d : Dict) -> int:
+    def _get_depth(self, d: Dict) -> int:
         if isinstance(d, dict):
             return 1 + (max(map(self._get_depth, d.values())) if d else 0)
         return 1
-    
 
     def _get_keys_by_layer(self, d):
         result = [[]]
@@ -102,10 +81,9 @@ class Universe:
                 for i in range(len(sub_result)):
                     if i >= len(result) - 1:
                         result.append([])
-                    result[i+1].extend(sub_result[i])
+                    result[i + 1].extend(sub_result[i])
             result[0].append(key)
         return result
-
 
     def _get_bottom_values(self, d):
         if isinstance(d, dict):
@@ -148,19 +126,45 @@ class Universe:
         return _universe
 
 
+class UniverseTree(Universe):
+    def __init__(self, universe: Optional[Dict] = None):
+        super().__init__(universe)
+        self._build_tree()
 
-test = Universe()
-print(test.get_keys_layer())
-print(test.get_last_layer())
-print(test.get_universe())
-print(test.get_universe_by_layer())
+    def _build_tree(self):
+        self.tree = Tree()
+        self.tree.create_node("Universe", "root")
 
-"""
-print("=======================")
-test.remove('Korea')
-print(test._hierarchy)
-print(test._hierarchy_list)
-print(test._universe)
+        def add_nodes(parent_key, data):
+            for key, value in data.items():
+                node_id = f"{parent_key}-{key}"
+                self.tree.create_node(key, node_id, parent=parent_key)
+                if isinstance(value, dict):
+                    add_nodes(node_id, value)
 
-test.diagram()
-"""
+        add_nodes("root", self._universe)
+
+    def remove(self, name):
+        nodes_to_remove = self.tree.search_nodes(name=name)
+        for node in nodes_to_remove:
+            self.tree.remove_node(node.identifier)
+
+    def _update(self, universe: Optional[Dict] = None):
+        super()._update(universe)
+        self._build_tree()
+
+    def diagram(self, filename=None, save_png=False):
+        g = Digraph('G', filename=filename or 'universe_tree_diagram', format='png')
+        
+        def create_nodes(node: Node):
+            for child in self.tree.children(node.identifier):
+                g.node(child.identifier, label=child.tag)
+                g.edge(node.identifier, child.identifier)
+                create_nodes(child)
+
+        create_nodes(self.tree.get_node("root"))
+
+        if save_png:
+            g.render(filename=filename or 'universe_tree_diagram', view=False)
+        else:
+            g.view()
