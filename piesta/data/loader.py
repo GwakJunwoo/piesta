@@ -3,7 +3,6 @@ from typing import Callable, List, Union
 from asset import Universe, UniverseTree
 import sqlite3
 import mysql.connector
-from typing import Union
 
 
 class Loader:
