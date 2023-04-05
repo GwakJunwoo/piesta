@@ -1,70 +1,79 @@
+import numpy as np
+import pandas as pd
+from typing import List, Callable, Dict
+from datetime import datetime, timedelta
+from pipeloc import AssetAllocationPipeline
+
 class Backtest:
-    def __init__(self, start_date, end_date, capital, pipeline, data, slippage=0, commission=0):
-        self.start_date = start_date
-        self.end_date = end_date
-        self.capital = capital
+    def __init__(self, pipeline: AssetAllocationPipeline, data: pd.DataFrame, start_date: datetime, end_date: datetime, rebalancing_frequency: timedelta, transaction_cost: float = 0.0, slippage: float = 0.0, benchmark: pd.DataFrame = None):
         self.pipeline = pipeline
         self.data = data
+        self.start_date = start_date
+        self.end_date = end_date
+        self.rebalancing_frequency = rebalancing_frequency
+        self.transaction_cost = transaction_cost
         self.slippage = slippage
-        self.commission = commission
+        self.benchmark = benchmark
 
-    def run_backtest(self):
-        start_time = time.time()
+    def run_backtest(self) -> Dict:
+        backtest_results = {}
+        current_date = self.start_date
+        weights = None
+        assets = self.pipeline.universe.get_last_layer()
+        rebalancing_dates = pd.date_range(self.start_date, self.end_date, freq=self.rebalancing_frequency)
 
-        # Get assets to be traded
-        assets = self.pipeline.screen(self.start_date)
+        while current_date <= self.end_date:
+            date_data = self.data.loc[self.data.index == current_date]
+            if not date_data.empty:
+                if current_date in rebalancing_dates or weights is None:
+                    allocation_results = self.pipeline.run_pipeline(date_data)
+                    new_weights = allocation_results[f'L{len(allocation_results)}']
 
-        # Initialize portfolio holdings and performance
-        portfolio = pd.DataFrame(index=[self.start_date], columns=assets, data=0)
-        portfolio_value = pd.Series(index=[self.start_date], data=self.capital)
+                    cost = self._calculate_cost(weights, new_weights) if weights is not None else 0
+                    weights = new_weights
 
-        # Loop over trading days
-        for date in pd.date_range(start=self.start_date + pd.Timedelta(days=1), end=self.end_date, freq='D'):
+                weighted_returns = self._calculate_weighted_returns(date_data, assets, weights, cost)
+                backtest_results[current_date] = weighted_returns.values[0]
 
-            # Get pipeline output for current date and assets
-            pipeline_output = self.pipeline.compute(date, assets=assets)
+            current_date += timedelta(days=1)
 
-            # Calculate optimal portfolio weights
-            objective = objective_functions.MaximizeReturns(pipeline_output['expected_returns'], pipeline_output['covariance'])
-            constraints = []
-            for i, lim in enumerate(pipeline_output['constraints']):
-                constraints.append(constraint_functions.LimitWeight(asset=assets[i], limit=lim))
-            problem = constraints_manager.ConstraintsManager(objective=objective, constraints=constraints)
-            weights = problem.solve()
+        backtest_df = self._generate_backtest_dataframe(backtest_results)
+        return self._generate_results(backtest_df)
 
-            # Adjust weights based on current holdings and available capital
-            available_capital = portfolio_value[date]
-            target_portfolio_value = available_capital * weights
-            trades = target_portfolio_value - portfolio.iloc[-1] * portfolio_value[date]
-            trades_cost = self.calculate_trades_cost(trades)
-            trades = trades - trades_cost
-            trades = self.apply_slippage(trades)
-            trades = self.apply_commission(trades)
-            trades_value = np.sum(trades * self.data.loc[date, assets])
-            portfolio_value[date] = available_capital - trades_cost - trades_value
-            portfolio.loc[date] = portfolio.iloc[-1] + trades / self.data.loc[date, assets]
+    def _calculate_cost(self, weights: pd.Series, new_weights: pd.Series) -> float:
+        turnover = np.abs(weights - new_weights).sum() / 2
+        return turnover * (self.transaction_cost + self.slippage)
 
-        # Calculate portfolio performance
-        returns = portfolio_value.pct_change().dropna()
-        total_return = returns.iloc[-1]
-        cagr = (1 + total_return) ** (252 / len(returns)) - 1
-        sharpe_ratio = sharpe_ratio(returns, 0)
-        max_drawdown = max_drawdown(returns)
+    def _calculate_weighted_returns(self, date_data: pd.DataFrame, assets: List[str], weights: pd.Series, cost: float) -> pd.Series:
+        asset_returns = date_data[assets].pct_change()
+        return asset_returns.mul(weights).sum() - cost
 
-        # Print performance metrics
-        print('Total Return: {:.2%}'.format(total_return))
-        print('CAGR: {:.2%}'.format(cagr))
-        print('Sharpe Ratio: {:.2f}'.format(sharpe_ratio))
-        print('Max Drawdown: {:.2%}'.format(max_drawdown))
-        print('Time Elapsed: {:.2f} seconds'.format(time.time() - start_time))
+    def _generate_backtest_dataframe(self, backtest_results: Dict) -> pd.DataFrame:
+        backtest_df = pd.Series(backtest_results)
+        if self.benchmark is not None:
+            benchmark_returns = self.benchmark.loc[self.start_date:self.end_date].pct_change()
+            backtest_df = pd.concat([backtest_df, benchmark_returns], axis=1, join='inner')
+            backtest_df.columns = ['Strategy', 'Benchmark']
+            backtest_df['Excess Returns'] = backtest_df['Strategy'] - backtest_df['Benchmark']
+            backtest_df = backtest_df.dropna()
+        return backtest_df
 
-        return portfolio_value, returns, total_return, cagr, sharpe_ratio, max_drawdown
+class GenerateResults:
+    def __init__(self, backtest_df: pd.DataFrame):
+        self.backtest_df = backtest_df
 
-    def calculate_trades_cost(self, trades):
-        return 0
+    def generate_results(self) -> Dict:
+        results = {}
+        results['Returns'] = self.backtest_df['Strategy'].sum()
+        results['Volatility'] = self.backtest_df['Strategy'].std() * np.sqrt(252)
+        results['Sharpe Ratio'] = results['Returns'] / results['Volatility']
+        results['Max Drawdown'] = (self.backtest_df['Strategy'].cummax() - self.backtest_df['Strategy']).max()
+        results['Turnover'] = (np.abs(self.backtest_df['Strategy'].diff()) / 2).mean() / self.backtest_df['Strategy'].mean()
 
-    def apply_slippage(self, trades):
-        return trades
+        if 'Benchmark' in self.backtest_df.columns:
+            results['Benchmark Returns'] = self.backtest_df['Benchmark'].sum()
+            results['Excess Returns'] = self.backtest_df['Excess Returns'].sum()
+            results['Information Ratio'] = results['Excess Returns'] / self.backtest_df['Excess Returns'].std()
+            results['Tracking Error'] = self.backtest_df['Excess Returns'].std()
 
-    def apply_commission(self, trades):
-        return trades
+        return results

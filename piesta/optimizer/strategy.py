@@ -1,62 +1,203 @@
+import pandas as pd
 import numpy as np
+from data.asset import Universe
+from abc import ABC, abstractmethod
+from typing import List, Callable, Dict, Optional, Tuple
+from scipy.optimize import minimize, LinearConstraint
 
-class Strategy:
-    def __init__(self, name, expected_returns, covariances, macro_data=None):
-        self.name = name
-        self.expected_returns = expected_returns
-        self.covariances = covariances
-        self.macro_data = macro_data
 
-    def get_optimal_weights(self, constraints=None):
-        n = self.expected_returns.shape[0]
-        x0 = np.full(n, 1.0 / n)
-        bounds = Bounds(0.0, 1.0)
+def mean_variance_strategy(universe: Universe, data: pd.DataFrame) -> pd.Series:
+    assets = universe.get_last_layer()
+    optimizer = MeanVarianceOptimizer()
+    return optimizer.optimize(data[assets])
 
-        # Define the objective function
-        def objective(x):
-            return -np.dot(x, self.expected_returns)
+class Optimizer(ABC):
+    @abstractmethod
+    def optimize(self, data: pd.DataFrame) -> pd.Series:
+        pass
 
-        # Define the inequality constraints
-        constraints_list = []
-        if constraints is not None:
-            for c in constraints:
-                if c['type'] == 'le':
-                    constraints_list.append(
-                        {'type': 'ineq', 'fun': lambda x, c=c: c['rhs'] - np.dot(x, c['coefficients'])})
-                elif c['type'] == 'ge':
-                    constraints_list.append(
-                        {'type': 'ineq', 'fun': lambda x, c=c: np.dot(x, c['coefficients']) - c['rhs']})
-                else:
-                    constraints_list.append(
-                        {'type': 'eq', 'fun': lambda x, c=c: np.dot(x, c['coefficients']) - c['rhs']})
+class MeanVarianceOptimizer(Optimizer):
+    def optimize(self, data: pd.DataFrame) -> pd.Series:
+        cov_matrix = data.cov()
+        mean_returns = data.mean()
+        num_assets = len(mean_returns)
+        initial_weights = np.random.random(num_assets)
+        initial_weights /= np.sum(initial_weights)
 
-        # Define the bounds and constraints
-        bounds_and_constraints = constraints_list.copy()
-        bounds_and_constraints.append(bounds)
+        def neg_sharpe_ratio(weights: np.ndarray) -> float:
+            portfolio_return = np.dot(mean_returns, weights)
+            portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+            sharpe_ratio = portfolio_return / portfolio_volatility
+            return -sharpe_ratio
 
-        # Optimize the weights using the SLSQP algorithm
-        result = minimize(objective, x0, method='SLSQP', bounds=bounds, constraints=constraints_list)
+        constraints = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}]
+        bounds = [(0, 1) for _ in range(num_assets)]
 
-        return result.x
-    
-class Custom_Strategy:
-    def __init__(self, name, returns, covariances, factors, macro_data):
-        self.name = name
-        self.returns = returns
-        self.covariances = covariances
-        self.factors = factors
-        self.macro_data = macro_data
+        optimized = minimize(neg_sharpe_ratio, initial_weights, bounds=bounds, constraints=constraints)
+        return pd.Series(optimized.x, index=data.columns)
 
-    def get_optimal_weights(self, start_date, end_date, universe):
-        # Calculate expected returns and covariance matrix
-        expected_returns = self.returns.loc[start_date:end_date, universe].mean()
-        covariances = self.covariances.loc[start_date:end_date, universe, universe]
+class NaiveOptimizer(Optimizer):
+    def optimize(self, data: pd.DataFrame) -> pd.Series:
+        num_assets = len(data.columns)
+        weights = np.ones(num_assets) / num_assets
+        return pd.Series(weights, index=data.columns)
 
-        # Calculate the constraints
-        constraints = constraints_manager(universe)
 
-        # Run the optimizer
-        weights = run_optimization(expected_returns, covariances, constraints)
+class BlackLittermanOptimizer(Optimizer):
+    def __init__(self, tau: float = 0.05, P: np.ndarray = None, Q: np.ndarray = None, omega: np.ndarray = None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tau = tau
+        self.P = P
+        self.Q = Q
+        self.omega = omega
+
+    def optimize(self, data: pd.DataFrame) -> Dict[str, float]:
+        expected_returns, cov_matrix = self._calculate_statistics(data)
+        posterior_expected_returns, posterior_cov_matrix = self._black_litterman(expected_returns, cov_matrix)
+        weights = self._optimize_portfolio(posterior_expected_returns, posterior_cov_matrix)
+        return dict(zip(data.columns, weights))
+
+    def _black_litterman(self, prior_returns: pd.Series, cov_matrix: pd.DataFrame) -> Tuple[pd.Series, pd.DataFrame]:
+        if self.P is None or self.Q is None or self.omega is None:
+            raise ValueError("P, Q, and Omega matrices are required for the Black-Litterman model")
+
+        # Compute the Black-Litterman posterior expected returns and covariance matrix
+        pi = self.tau * cov_matrix.dot(prior_returns)
+        omega_inv = np.linalg.inv(self.omega)
+        cov_matrix_inv = np.linalg.inv(cov_matrix)
+
+        # Compute the posterior expected returns
+        posterior_expected_returns = np.linalg.inv(cov_matrix_inv + self.P.T.dot(omega_inv).dot(self.P)).dot(cov_matrix_inv.dot(pi) + self.P.T.dot(omega_inv).dot(self.Q))
+
+        # Compute the posterior covariance matrix
+        posterior_cov_matrix = cov_matrix + np.linalg.inv(cov_matrix_inv + self.P.T.dot(omega_inv).dot(self.P))
+
+        return pd.Series(posterior_expected_returns, index=prior_returns.index), posterior_cov_matrix
+
+
+class GoalBasedOptimizer(Optimizer):
+    def __init__(self, goals: List[Dict], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.goals = goals
+
+    def optimize(self, data: pd.DataFrame) -> Dict[str, float]:
+        expected_returns, cov_matrix = self._calculate_statistics(data)
+        weights = self._goal_based_investing(expected_returns, cov_matrix)
+        return dict(zip(data.columns, weights))
+
+    def _goal_based_investing(self, expected_returns: pd.Series, cov_matrix: pd.DataFrame) -> np.ndarray:
+        # Sort goals by priority
+        sorted_goals = sorted(self.goals, key=lambda goal: goal['priority'])
+
+        # Initialize portfolio weights
+        weights = np.zeros(len(expected_returns))
+
+        for goal in sorted_goals:
+            goal_horizon = goal['horizon']
+            goal_amount = goal['amount']
+
+            # Calculate the weights for the current goal
+            goal_weights = self._optimize_portfolio(expected_returns, cov_matrix, goal_horizon)
+
+            # Allocate assets to meet the goal
+            weights += goal_weights * goal_amount
+
+        # Normalize weights
+        weights /= np.sum(weights)
 
         return weights
 
+
+class RiskParityOptimizer(Optimizer):
+    def __init__(self, risk_aversion: float = 1.0, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.risk_aversion = risk_aversion
+
+    def optimize(self, data: pd.DataFrame) -> Dict[str, float]:
+        expected_returns, cov_matrix = self._calculate_statistics(data)
+        weights = self._risk_parity_allocation(cov_matrix)
+        return dict(zip(data.columns, weights))
+
+    def _risk_parity_allocation(self, cov_matrix: pd.DataFrame) -> np.ndarray:
+        # Initialize portfolio weights
+        num_assets = len(cov_matrix)
+        init_weights = np.ones(num_assets) / num_assets
+        constraints = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1.0}]
+
+        # Define the objective function for risk parity
+        def risk_parity_objective_function(weights, cov_matrix, risk_aversion):
+            portfolio_volatility = np.sqrt(weights.T.dot(cov_matrix).dot(weights))
+            risk_contributions = self._calculate_risk_contributions(weights, cov_matrix)
+            risk_diffs = risk_contributions - risk_aversion * portfolio_volatility / num_assets
+            return np.sum(np.square(risk_diffs))
+
+        # Optimize the portfolio weights
+        optimized_result = minimize(risk_parity_objective_function, init_weights, args=(cov_matrix, self.risk_aversion),
+                                    method='SLSQP', constraints=constraints, bounds=[(0, 1) for _ in range(num_assets)])
+
+        return optimized_result.x
+
+    def _calculate_risk_contributions(self, weights, cov_matrix):
+        portfolio_volatility = np.sqrt(weights.T.dot(cov_matrix).dot(weights))
+        marginal_risk_contributions = cov_matrix.dot(weights)
+        risk_contributions = np.multiply(marginal_risk_contributions, weights.T) / portfolio_volatility
+        return risk_contributions
+
+
+
+class CustomOptimizer(Optimizer):
+    def __init__(self,
+                 custom_objective_function: Callable[[np.ndarray], float],
+                 custom_constraints: List[Dict],
+                 custom_bounds: Optional[Tuple[float, float]] = None,
+                 *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.custom_objective_function = custom_objective_function
+        self.custom_constraints = custom_constraints
+        self.custom_bounds = custom_bounds
+
+    def optimize(self, data: pd.DataFrame) -> Dict[str, float]:
+        expected_returns, cov_matrix = self._calculate_statistics(data)
+        weights = self._custom_allocation(expected_returns, cov_matrix)
+        return dict(zip(data.columns, weights))
+
+    def _custom_allocation(self, expected_returns: pd.Series, cov_matrix: pd.DataFrame) -> np.ndarray:
+        num_assets = len(cov_matrix)
+        init_weights = np.ones(num_assets) / num_assets
+        bounds = self.custom_bounds or [(0, 1) for _ in range(num_assets)]
+
+        def wrapped_objective_function(weights):
+            return self.custom_objective_function(weights, expected_returns, cov_matrix)
+
+        optimized_result = minimize(wrapped_objective_function, init_weights, method='SLSQP',
+                                    constraints=self.custom_constraints, bounds=bounds)
+        return optimized_result.x
+
+
+def mean_variance_objective_function(weights, expected_returns, cov_matrix):
+    portfolio_volatility = np.sqrt(weights.T.dot(cov_matrix).dot(weights))
+    portfolio_return = expected_returns.dot(weights)
+    return -portfolio_return / portfolio_volatility
+
+custom_constraints = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1.0}]
+custom_bounds = (0, 1)
+
+custom_mean_variance_optimizer = CustomOptimizer(mean_variance_objective_function,
+                                                 custom_constraints,
+                                                 custom_bounds)
+
+data = pd.DataFrame()  # load data
+allocation = custom_mean_variance_optimizer.optimize(data)
+
+
+
+"""
+# Sample usage
+universe = Universe()  # Assuming you're using the Universe class provided earlier
+strategies = [mean_variance_strategy]  # List of strategy functions
+
+pipeline = AssetAllocationPipeline(universe, strategies)
+data = pd.DataFrame()  # Load your data here
+allocation_results = pipeline.run_pipeline(data)
+
+print(allocation_results)"""
