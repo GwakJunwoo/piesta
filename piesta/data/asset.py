@@ -113,7 +113,7 @@ class Universe:
                 'Hedge fund': ['Ticker_16', 'Ticker_17']
             },
             'Commodity': {
-                'Metal': ['Ticker_18', 'Ticker_19'],
+                'Metal' : [],
                 'Grains': ['Ticker_20', 'Ticker_21'],
                 'Energy': ['Ticker_22', 'Ticker_23']
             },
@@ -168,3 +168,10 @@ class UniverseTree(Universe):
             g.render(filename=filename or 'universe_tree_diagram', view=False)
         else:
             g.view()
+
+
+
+if __main__ == '__name__':
+    univ = Universe()
+    print(univ.get_universe_by_layer())
+    print(univ.get_last_layer())

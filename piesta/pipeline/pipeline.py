@@ -2,14 +2,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Callable
 import pandas as pd
 from itertools import islice 
-from graphviz import Diagraph
-
-
-def _fit_model(model, )
-
-
-
-
+from graphviz import Digraph
 
 
 class Portfolio_Pipeline:
@@ -50,7 +43,7 @@ class Portfolio_Pipeline:
             model.weights
 
     def plot_pipeline(self,):
-        pipeline = Diagraph(name='pipeline', filename='pipeline', format='png', directory='./')
+        pipeline = Digraph(name='pipeline', filename='pipeline', format='png', directory='./')
         pipeline.attr('node', {'shape':'box', "color":'black', "penwidth":'1'}, label='Portfolio Pipeline')
         for i in range(0,2):
             pipeline.edges(f'[{self.steps[i][0]}]{self.steps[i][1]}', f'[{self.steps[i+1][0]}]{self.steps[i+1][1]}', label = "Constraints")
@@ -85,4 +78,5 @@ class Backtest:
                 weights = strategy.get_optimal_weights(params, constraint=weights if strategy.name in ['TAA', 'AP'] else None)
             self.weights[rebalancing_date] = weights
 
-    def plot(self,)
+    def plot(self,):
+        pass

@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from typing import List, Callable, Dict
 from datetime import datetime, timedelta
-from pipeloc import AssetAllocationPipeline
 
 class Backtest:
     def __init__(self, pipeline: AssetAllocationPipeline, data: pd.DataFrame, start_date: datetime, end_date: datetime, rebalancing_frequency: timedelta, transaction_cost: float = 0.0, slippage: float = 0.0, benchmark: pd.DataFrame = None):
