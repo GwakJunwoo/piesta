@@ -168,10 +168,3 @@ class UniverseTree(Universe):
             g.render(filename=filename or 'universe_tree_diagram', view=False)
         else:
             g.view()
-
-
-
-if __main__ == '__name__':
-    univ = Universe()
-    print(univ.get_universe_by_layer())
-    print(univ.get_last_layer())

@@ -1,6 +1,6 @@
 import pandas as pd
 from typing import Callable, List, Union
-from asset import Universe, UniverseTree
+from piesta.data.asset import Universe, UniverseTree
 import sqlite3
 import mysql.connector
 

@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from data.asset import Universe
+from piesta.data.asset import Universe
 from abc import ABC, abstractmethod
 from typing import List, Callable, Dict, Optional, Tuple
 from scipy.optimize import minimize, LinearConstraint
@@ -173,6 +173,7 @@ def mean_variance_objective_function(weights, expected_returns, cov_matrix):
     portfolio_return = expected_returns.dot(weights)
     return -portfolio_return / portfolio_volatility
 
+'''
 custom_constraints = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1.0}]
 custom_bounds = (0, 1)
 
@@ -182,7 +183,7 @@ custom_mean_variance_optimizer = CustomOptimizer(mean_variance_objective_functio
 
 data = pd.DataFrame()  # load data
 allocation = custom_mean_variance_optimizer.optimize(data)
-
+'''
 
 
 """
