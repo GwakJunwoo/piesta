@@ -8,13 +8,7 @@ from scipy.optimize import minimize, LinearConstraint
 class Optimizer(ABC):
     @abstractmethod
     def optimize(self, data: pd.DataFrame) -> pd.Series:
-        pass
-
-    def set_constraints(self, constraints):
-        self.constraints = [
-            {'type':'eq', 'fun':lambda x: x[]},
-            {'type:''eq', 'fun':lambda x: np.sum(x) - 1}]
-        
+        pass        
 
 class MeanVarianceOptimizer(Optimizer):
     def optimize(self, data: pd.DataFrame, constraints) -> pd.Series:
@@ -31,7 +25,7 @@ class MeanVarianceOptimizer(Optimizer):
             return -sharpe_ratio
 
         bounds = [(0, 1) for _ in range(num_assets)]
-        optimized = minimize(neg_sharpe_ratio, initial_weights, bounds = bounds, constraints = self.constraints)
+        optimized = minimize(neg_sharpe_ratio, initial_weights, bounds = bounds, constraints = constraints)
         return dict(zip(data.columns, optimized.x))
 
 class NaiveOptimizer(Optimizer):
