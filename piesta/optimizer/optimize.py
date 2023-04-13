@@ -10,8 +10,14 @@ class Optimizer(ABC):
     def optimize(self, data: pd.DataFrame) -> pd.Series:
         pass
 
+    def set_constraints(self, constraints):
+        self.constraints = [
+            {'type':'eq', 'fun':lambda x: x[]},
+            {'type:''eq', 'fun':lambda x: np.sum(x) - 1}]
+        
+
 class MeanVarianceOptimizer(Optimizer):
-    def optimize(self, data: pd.DataFrame) -> pd.Series:
+    def optimize(self, data: pd.DataFrame, constraints) -> pd.Series:
         cov_matrix = data.cov()
         mean_returns = data.mean()
         num_assets = len(mean_returns)
@@ -24,11 +30,9 @@ class MeanVarianceOptimizer(Optimizer):
             sharpe_ratio = portfolio_return / portfolio_volatility
             return -sharpe_ratio
 
-        constraints = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}]
         bounds = [(0, 1) for _ in range(num_assets)]
-
-        optimized = minimize(neg_sharpe_ratio, initial_weights, bounds=bounds, constraints=constraints)
-        return pd.Series(optimized.x, index=data.columns)
+        optimized = minimize(neg_sharpe_ratio, initial_weights, bounds = bounds, constraints = self.constraints)
+        return dict(zip(data.columns, optimized.x))
 
 class NaiveOptimizer(Optimizer):
     def optimize(self, data: pd.DataFrame) -> pd.Series:

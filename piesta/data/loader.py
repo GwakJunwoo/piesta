@@ -58,6 +58,8 @@ class SQLDatabaseConnection:
     def close(self):
         self.conn.close()
 
+
+"""
 # Example usage:
 universe = Universe()  # or UniverseTree()
 database_connection = SQLDatabaseConnection(db_type="sqlite3", db_path="example.db", table="prices", index_col="date")
@@ -69,3 +71,4 @@ print(data)
 database_connection.close()
 
 #loader = Loader(universe, mock_database_connection)
+"""
